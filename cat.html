@@ -875,6 +875,9 @@
           }
       });
 
+      // Add color walkway collision check
+      checkColorWalkwayCollision();
+
       renderer.render(scene, camera);
     }
     requestAnimationFrame(animate);
@@ -885,6 +888,102 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    // Add color selection walkway after the moving walkway
+    const colorWalkwayGroup = new THREE.Group();
+    
+    // Available colors with names
+    const colors = [
+        { name: 'Grey', hex: 0xd3d3d3 },
+        { name: 'Orange', hex: 0xFFA500 },
+        { name: 'Black', hex: 0x000000 },
+        { name: 'White', hex: 0xFFFFFF },
+        { name: 'Brown', hex: 0x8B4513 },
+        { name: 'Cream', hex: 0xFFEFD5 },
+        { name: 'Ginger', hex: 0xFF6347 },
+        { name: 'Blue', hex: 0x4169E1 },
+        { name: 'Pink', hex: 0xFF69B4 },
+        { name: 'Purple', hex: 0x800080 }
+    ];
+
+    // Create color sections
+    const sectionWidth = 6;  // Wider sections
+    const walkwayLength = colors.length * sectionWidth;
+    const walkwayWidth = 8;  // Wide enough to easily walk on
+
+    colors.forEach((color, index) => {
+        // Create colored section
+        const sectionGeometry = new THREE.BoxGeometry(sectionWidth, 0.5, walkwayWidth);
+        const sectionMaterial = new THREE.MeshPhongMaterial({ 
+            color: color.hex,
+            shininess: 100,
+            specular: 0x444444
+        });
+        const section = new THREE.Mesh(sectionGeometry, sectionMaterial);
+        
+        // Position each section
+        section.position.set(index * sectionWidth - walkwayLength/2, 0.25, 0);
+        
+        // Add metadata for color changing
+        section.userData.isColorSection = true;
+        section.userData.color = color.hex;
+        
+        colorWalkwayGroup.add(section);
+
+        // Add text label on the ground
+        const labelCanvas = document.createElement('canvas');
+        labelCanvas.width = 256;
+        labelCanvas.height = 64;
+        const labelContext = labelCanvas.getContext('2d');
+        labelContext.fillStyle = '#FFFFFF';
+        labelContext.font = 'bold 48px Arial';
+        labelContext.textAlign = 'center';
+        labelContext.textBaseline = 'middle';
+        labelContext.strokeStyle = '#000000';
+        labelContext.lineWidth = 4;
+        labelContext.strokeText(color.name, labelCanvas.width/2, labelCanvas.height/2);
+        labelContext.fillText(color.name, labelCanvas.width/2, labelCanvas.height/2);
+
+        const labelTexture = new THREE.CanvasTexture(labelCanvas);
+        const labelGeometry = new THREE.PlaneGeometry(sectionWidth * 0.8, sectionWidth * 0.2);
+        const labelMaterial = new THREE.MeshBasicMaterial({
+            map: labelTexture,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+        const label = new THREE.Mesh(labelGeometry, labelMaterial);
+        label.rotation.x = -Math.PI/2;
+        label.position.set(index * sectionWidth - walkwayLength/2, 0.51, 0);
+        colorWalkwayGroup.add(label);
+    });
+
+    // Position the color walkway
+    colorWalkwayGroup.position.set(8, 0, -30); // Move to right of spawn, parallel to escalator
+    colorWalkwayGroup.rotation.y = Math.PI/2;  // Rotate to align with escalator
+    scene.add(colorWalkwayGroup);
+
+    // Add collision detection for color walkway sections
+    function checkColorWalkwayCollision() {
+        const catBox = new THREE.Box3().setFromObject(cat);
+        colorWalkwayGroup.children.forEach(child => {
+            if (child.userData.isColorSection) {
+                const sectionBox = new THREE.Box3().setFromObject(child);
+                if (catBox.intersectsBox(sectionBox)) {
+                    // Change cat color
+                    const newColor = child.userData.color;
+                    bodyMesh.material.color.setHex(newColor);
+                    frontLeftLeg.material.color.setHex(newColor);
+                    frontRightLeg.material.color.setHex(newColor);
+                    backLeftLeg.material.color.setHex(newColor);
+                    backRightLeg.material.color.setHex(newColor);
+                    headMesh.material.color.setHex(newColor);
+                    tailMesh.material.color.setHex(newColor);
+                    leftEar.material.color.setHex(newColor);
+                    rightEar.material.color.setHex(newColor);
+                }
+            }
+        });
+    }
   </script>
 </body>
 </html>
