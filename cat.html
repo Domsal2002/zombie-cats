@@ -44,9 +44,113 @@
     ground.rotation.x = -Math.PI/2;
     scene.add(ground);
 
+    // === Moving Walkway ===
+    const walkwayGroup = new THREE.Group();
+    
+    // Base structure
+    const baseGeometry = new THREE.BoxGeometry(60, 0.5, 4);
+    const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    walkwayGroup.add(base);
+
+    // Moving belt (segments that will animate)
+    const beltSegments = [];
+    const segmentWidth = 1;
+    const numSegments = 60; // More segments for smoother appearance
+    const segmentGeometry = new THREE.BoxGeometry(segmentWidth, 0.1, 3.8);
+    const blackMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0x000000,
+        metalness: 0.8,
+        roughness: 0.2
+    });
+    const whiteMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0xFFFFFF,
+        metalness: 0.8,
+        roughness: 0.2
+    });
+
+    for(let i = 0; i < numSegments; i++) {
+        const segment = new THREE.Group();
+        
+        // Belt segment with alternating colors
+        const beltPart = new THREE.Mesh(
+            segmentGeometry, 
+            i % 2 === 0 ? whiteMaterial : blackMaterial
+        );
+        segment.add(beltPart);
+        
+        segment.position.set(-30 + i * segmentWidth, 0.3, 0);
+        walkwayGroup.add(segment);
+        beltSegments.push(segment);
+    }
+
+    // Side rails
+    const railGeometry = new THREE.BoxGeometry(60, 0.8, 0.2);
+    const railMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0x666666,
+        metalness: 0.6,
+        roughness: 0.3
+    });
+    
+    const frontRail = new THREE.Mesh(railGeometry, railMaterial);
+    frontRail.position.set(0, 0.4, 2);
+    walkwayGroup.add(frontRail);
+    
+    const backRail = new THREE.Mesh(railGeometry, railMaterial);
+    backRail.position.set(0, 0.4, -2);
+    walkwayGroup.add(backRail);
+
+    // Add yellow safety strips
+    const stripGeometry = new THREE.BoxGeometry(60, 0.1, 0.3);
+    const stripMaterial = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+    
+    const frontStrip = new THREE.Mesh(stripGeometry, stripMaterial);
+    frontStrip.position.set(0, 0.31, 1.9);
+    walkwayGroup.add(frontStrip);
+    
+    const backStrip = new THREE.Mesh(stripGeometry, stripMaterial);
+    backStrip.position.set(0, 0.31, -1.9);
+    walkwayGroup.add(backStrip);
+
+    // Position the walkway to lead to the billboard
+    walkwayGroup.position.set(0, 0, -30);
+    walkwayGroup.rotation.y = Math.PI/2;
+    scene.add(walkwayGroup);
+
+    // Add collision box for walkway
+    const walkwayBox = new THREE.Box3();
+    const walkwayBounds = new THREE.Box3().setFromObject(base);
+    walkwayGroup.userData.walkwayBox = walkwayBox;
+    walkwayGroup.userData.updateWalkwayBox = function() {
+        walkwayBox.copy(walkwayBounds).applyMatrix4(walkwayGroup.matrixWorld);
+    };
+
     // === Sparse Forest with Spherical Canopies ===
-    const numTrees = 30;
-    for (let i = 0; i < numTrees; i++){
+    const treePositions = [
+      { x: -20, z: -40 },
+      { x: 20, z: -40 },
+      { x: -20, z: -80 },
+      { x: 20, z: -80 },
+      { x: -40, z: -30 },
+      { x: -45, z: -40 },
+      { x: -50, z: -35 },
+      { x: -42, z: -45 },
+      { x: 40, z: -30 },
+      { x: 45, z: -40 },
+      { x: 50, z: -35 },
+      { x: 42, z: -45 },
+      { x: -30, z: -100 },
+      { x: -15, z: -95 },
+      { x: 0, z: -100 },
+      { x: 15, z: -95 },
+      { x: 30, z: -100 },
+      { x: -60, z: -60 },
+      { x: 60, z: -60 },
+      { x: -40, z: -70 },
+      { x: 40, z: -70 }
+    ];
+
+    treePositions.forEach(pos => {
       const tree = new THREE.Group();
       const trunkGeom = new THREE.CylinderGeometry(0.5, 0.5, 5, 8);
       const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
@@ -58,20 +162,104 @@
       const canopy = new THREE.Mesh(canopyGeom, canopyMat);
       canopy.position.y = 5 + 3;
       tree.add(canopy);
-      tree.position.x = (Math.random()-0.5)*200;
-      tree.position.z = (Math.random()-0.5)*200;
+      tree.position.set(pos.x, 0, pos.z);
       scene.add(tree);
-    }
+    });
 
     // === Create Billboard with Controls Instructions ===
+    function createTrampoline() {
+      const trampoline = new THREE.Group();
+
+      // Colors
+      const frameColor = 0x4287f5;    // Bright blue
+      const surfaceColor = 0x000000;  // Black
+      const padColor = 0xff8c1a;      // Safety orange
+
+      // Dimensions
+      const diameter = 12;
+      const frameThickness = 0.5;
+      const legHeight = 2.0;  // Made shorter
+      const surfaceY = legHeight + frameThickness/2;
+
+      // Create frame (outer ring)
+      const frameGeometry = new THREE.TorusGeometry(diameter/2, frameThickness, 16, 32);
+      const frameMaterial = new THREE.MeshLambertMaterial({ color: frameColor });
+      const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+      frame.rotation.x = Math.PI/2;
+      frame.position.y = surfaceY;
+      trampoline.add(frame);
+
+      // Create legs - now attached to the ring positions
+      const legGeometry = new THREE.CylinderGeometry(0.3, 0.3, legHeight, 8);
+      const legMaterial = new THREE.MeshLambertMaterial({ color: frameColor });
+      
+      const legPositions = [
+        { angle: Math.PI/4, x: 0, z: 0 },
+        { angle: 3*Math.PI/4, x: 0, z: 0 },
+        { angle: 5*Math.PI/4, x: 0, z: 0 },
+        { angle: 7*Math.PI/4, x: 0, z: 0 }
+      ];
+
+      legPositions.forEach(pos => {
+        // Calculate position based on ring
+        pos.x = Math.cos(pos.angle) * (diameter/2 - frameThickness);
+        pos.z = Math.sin(pos.angle) * (diameter/2 - frameThickness);
+        
+        const leg = new THREE.Mesh(legGeometry, legMaterial);
+        leg.position.set(pos.x, legHeight/2, pos.z);
+        trampoline.add(leg);
+
+        // Add foot pad
+        const padGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.2, 8);
+        const padMaterial = new THREE.MeshLambertMaterial({ color: padColor });
+        const pad = new THREE.Mesh(padGeometry, padMaterial);
+        pad.position.set(pos.x, 0.1, pos.z);
+        trampoline.add(pad);
+      });
+
+      // Create bouncy surface
+      const surfaceGeometry = new THREE.CircleGeometry(diameter/2 - frameThickness, 32);
+      const surfaceMaterial = new THREE.MeshLambertMaterial({ 
+        color: surfaceColor,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9
+      });
+      const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
+      surface.rotation.x = -Math.PI/2;
+      surface.position.y = surfaceY - 0.1;
+      trampoline.add(surface);
+
+      // Add collision box for the entire trampoline surface including the black part
+      const collisionGeometry = new THREE.CylinderGeometry(diameter/2 - frameThickness/2, diameter/2 - frameThickness/2, 0.5, 32);
+      const collisionMaterial = new THREE.MeshBasicMaterial({ 
+        visible: false,
+        transparent: true,
+        opacity: 0 
+      });
+      const collisionMesh = new THREE.Mesh(collisionGeometry, collisionMaterial);
+      collisionMesh.position.y = surfaceY;
+      trampoline.add(collisionMesh);
+
+      // Add collision detection properties
+      const trampolineBox = new THREE.Box3();
+      const trampolineBounds = new THREE.Box3().setFromObject(collisionMesh);
+      trampoline.userData.trampolineBox = trampolineBox;
+      trampoline.userData.updateTrampolineBox = function() {
+        trampolineBox.copy(trampolineBounds).applyMatrix4(trampoline.matrixWorld);
+      };
+
+      return trampoline;
+    }
+
     function createBillboard(text) {
       const canvas = document.createElement('canvas');
-      canvas.width = 8192; // Much higher resolution
+      canvas.width = 8192;
       canvas.height = 4096;
       const context = canvas.getContext('2d');
       
       // Create a modern billboard background
-      context.fillStyle = '#1a1a1a'; // Dark background
+      context.fillStyle = '#1a1a1a';
       context.fillRect(0, 0, canvas.width, canvas.height);
       
       // Add a subtle border
@@ -81,7 +269,7 @@
       
       // Set text properties
       context.fillStyle = '#FFFFFF';
-      context.font = 'bold 400px Arial'; // Modern font
+      context.font = 'bold 400px Arial';
       context.textAlign = 'center';
       
       // Add a text glow effect
@@ -91,7 +279,7 @@
       context.shadowOffsetY = 0;
       
       const lines = text.split('\n');
-      const lineHeight = 500; // Increased line height
+      const lineHeight = 500;
       for (let i = 0; i < lines.length; i++){
         context.fillText(lines[i], canvas.width/2, 600 + i*lineHeight);
       }
@@ -99,15 +287,38 @@
       const texture = new THREE.CanvasTexture(canvas);
       
       const billboard = new THREE.Group();
+
+      // Add support pole
+      const poleColor = 0x666666; // Gray color for pole
+      const poleGeometry = new THREE.CylinderGeometry(2, 2, 40, 32);
+      const poleMaterial = new THREE.MeshLambertMaterial({ color: poleColor });
+      const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+      pole.position.y = 20; // Half height since it starts from ground
+      billboard.add(pole);
+
+      // Add sphere at top of pole
+      const sphereGeometry = new THREE.SphereGeometry(3, 32, 32);
+      const sphereMaterial = new THREE.MeshLambertMaterial({ color: poleColor });
+      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      sphere.position.y = 40;
+      billboard.add(sphere);
+
+      // Add collision box for pole
+      const poleBox = new THREE.Box3();
+      const poleBounds = new THREE.Box3().setFromObject(pole);
+      billboard.userData.poleBox = poleBox;
+      billboard.userData.updatePoleBox = function() {
+        poleBox.copy(poleBounds).applyMatrix4(billboard.matrixWorld);
+      };
       
       // Create a solid billboard back
       const billboardBackGeometry = new THREE.BoxGeometry(80, 40, 1);
       const billboardBackMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
       const billboardBack = new THREE.Mesh(billboardBackGeometry, billboardBackMaterial);
-      billboardBack.position.y = 60; // Position above pole
+      billboardBack.position.y = 60;
       billboard.add(billboardBack);
 
-      // Create the sign as a regular mesh (front face with text)
+      // Create the sign
       const signGeometry = new THREE.PlaneGeometry(80, 40);
       const signMaterial = new THREE.MeshLambertMaterial({ 
         map: texture,
@@ -115,61 +326,63 @@
       });
       const sign = new THREE.Mesh(signGeometry, signMaterial);
       sign.position.y = 60;
-      sign.position.z = 0.51; // Slightly in front of the back
+      sign.position.z = 0.51;
       billboard.add(sign);
 
-      // Add platform (boardwalk) - wider and deeper than before
-      const platformGeometry = new THREE.BoxGeometry(82, 2, 10); // Made thicker
-      const platformMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Wooden color
+      // Add platform (boardwalk) - matching pole color
+      const platformGeometry = new THREE.BoxGeometry(82, 2, 10);
+      const platformMaterial = new THREE.MeshLambertMaterial({ color: poleColor });
       const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-      platform.position.set(0, 40, 0); // Lower platform height
+      platform.position.set(0, 40, 0);
       billboard.add(platform);
       
-      // Add single central support pole with solid geometry
-      const poleGeometry = new THREE.CylinderGeometry(2, 2, 40, 16, 1, false); // Set closed cylinder
-      const poleMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 }); // Metal grey
-      const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-      pole.position.set(0, 20, 0); // Adjusted center point
-      billboard.add(pole);
-
-      // Add ladder with adjusted height
+      // Add ladder with adjusted height and red color
       const ladderGroup = new THREE.Group();
+      const ladderColor = 0xff0000; // Red color
+      const ladderHeight = 40; // Match platform height
+      const ladderWidth = 2; // Wider ladder
+      const ladderDepth = 0.4;
+      const rungSpacing = 2; // Space between rungs
+      const numRungs = Math.floor(ladderHeight / rungSpacing);
       
-      // Add solid ladder back for collision
-      const ladderBackGeometry = new THREE.BoxGeometry(0.8, 42, 0.2); // Slightly taller
-      const ladderBackMaterial = new THREE.MeshLambertMaterial({ color: 0x666666, opacity: 0.0, transparent: true });
-      const ladderBack = new THREE.Mesh(ladderBackGeometry, ladderBackMaterial);
-      ladderBack.position.set(0, 21, 2.3); // Adjusted center point
-      ladderGroup.add(ladderBack);
-      
-      // Vertical rails - adjusted height
-      const railGeometry = new THREE.CylinderGeometry(0.05, 0.05, 42, 8); // Slightly taller
-      const railMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+      // Create side rails
+      const railGeometry = new THREE.BoxGeometry(0.2, ladderHeight, 0.2);
+      const railMaterial = new THREE.MeshLambertMaterial({ color: ladderColor });
       
       const leftRail = new THREE.Mesh(railGeometry, railMaterial);
-      leftRail.position.set(-0.3, 21, 2.3);
+      leftRail.position.set(-ladderWidth/2, ladderHeight/2, 2.3);
       ladderGroup.add(leftRail);
       
       const rightRail = new THREE.Mesh(railGeometry, railMaterial);
-      rightRail.position.set(0.3, 21, 2.3);
+      rightRail.position.set(ladderWidth/2, ladderHeight/2, 2.3);
       ladderGroup.add(rightRail);
       
-      // Rungs - adjusted number for new height and rotated correctly
-      const rungGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.6, 8);
-      const rungMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+      // Create rungs
+      const rungGeometry = new THREE.CylinderGeometry(0.1, 0.1, ladderWidth + 0.2, 8);
+      const rungMaterial = new THREE.MeshLambertMaterial({ color: ladderColor });
       
-      for(let i = 0; i < 40; i++) {
+      for(let i = 0; i < numRungs; i++) {
         const rung = new THREE.Mesh(rungGeometry, rungMaterial);
-        // Change rotation to make rungs connect to side rails properly
         rung.rotation.z = Math.PI/2;
-        rung.position.set(0, i + 1, 2.3); // Adjusted spacing
+        rung.position.set(0, i * rungSpacing + rungSpacing/2, 2.3);
         ladderGroup.add(rung);
       }
+
+      // Add collision box for ladder (wider than visual ladder for easier climbing)
+      const ladderBackGeometry = new THREE.BoxGeometry(ladderWidth + 1, ladderHeight, ladderDepth);
+      const ladderBackMaterial = new THREE.MeshLambertMaterial({ 
+        color: ladderColor,
+        transparent: true,
+        opacity: 0 // Invisible collision box
+      });
+      const ladderBack = new THREE.Mesh(ladderBackGeometry, ladderBackMaterial);
+      ladderBack.position.set(0, ladderHeight/2, 2.3);
+      ladderGroup.add(ladderBack);
       
       ladderGroup.position.set(0, 0, 0);
       billboard.add(ladderGroup);
 
-      // Add collision box for ladder
+      // Add collision boxes
       const ladderBox = new THREE.Box3();
       const ladderBounds = new THREE.Box3().setFromObject(ladderBack);
       billboard.userData.ladderBox = ladderBox;
@@ -177,7 +390,6 @@
         ladderBox.copy(ladderBounds).applyMatrix4(billboard.matrixWorld);
       };
 
-      // Add collision box for platform
       const platformBox = new THREE.Box3();
       const platformBounds = new THREE.Box3().setFromObject(platform);
       billboard.userData.platformBox = platformBox;
@@ -185,6 +397,14 @@
         platformBox.copy(platformBounds).applyMatrix4(billboard.matrixWorld);
       };
       
+      // Add trampoline
+      const trampoline = createTrampoline();
+      trampoline.position.set(-45, 0, 0);
+      billboard.add(trampoline);
+
+      billboard.userData.trampolineBox = trampoline.userData.trampolineBox;
+      billboard.userData.updateTrampolineBox = trampoline.userData.updateTrampolineBox;
+
       return billboard;
     }
     
@@ -463,6 +683,7 @@
     // === Animation Loop ===
     let lastTime = 0;
     let isOnLadder = false;
+    let isOnWalkway = false;
 
     function animate(time) {
       requestAnimationFrame(animate);
@@ -472,32 +693,42 @@
       // Update collision boxes
       billboard.userData.updateLadderBox();
       billboard.userData.updatePlatformBox();
+      billboard.userData.updateTrampolineBox();
+      billboard.userData.updatePoleBox();
+      walkwayGroup.userData.updateWalkwayBox();
 
-      // Check if cat is near the ladder
+      // Check collisions
       const catBox = new THREE.Box3().setFromObject(cat);
       isOnLadder = catBox.intersectsBox(billboard.userData.ladderBox);
-
-      // Check if cat is on platform
-      const isOnPlatform = catBox.intersectsBox(billboard.userData.platformBox);
+      isOnPlatform = catBox.intersectsBox(billboard.userData.platformBox);
+      isOnTrampoline = catBox.intersectsBox(billboard.userData.trampolineBox);
+      isCollidingWithPole = catBox.intersectsBox(billboard.userData.poleBox);
+      isOnWalkway = catBox.intersectsBox(walkwayGroup.userData.walkwayBox);
 
       // Handle ladder climbing and platform collision
       if (isOnLadder && moveKeys.forward) {
-        // Move up along ladder
         const oldY = cat.position.y;
-        cat.position.y += 5 * dt; // Climb speed
-        
-        // Keep cat against ladder
+        cat.position.y += 5 * dt;
         cat.position.z = billboard.position.z + 2.3;
-        
         cat.userData.velocityY = 0;
         cat.userData.isJumping = false;
       } else if (isOnPlatform) {
-        // Allow walking on platform
         cat.userData.velocityY = 0;
         cat.userData.isJumping = false;
-        cat.position.y = 41; // Adjusted to match new platform thickness
+        cat.position.y = 41;
+        if (moveKeys.Space) {
+          cat.userData.velocityY = 12;
+          cat.userData.isJumping = true;
+        }
+      } else if (isOnTrampoline) {
+        if (cat.position.y <= 2.25) {
+          cat.position.y = 2.25;
+          cat.userData.velocityY = 25;
+        }
+        cat.position.y += cat.userData.velocityY * dt;
+        cat.userData.velocityY += -40 * dt;
+        cat.userData.isJumping = true;
       } else if (!isOnLadder && !isOnPlatform) {
-        // Normal gravity physics
         cat.position.y += cat.userData.velocityY * dt;
         cat.userData.velocityY += -30 * dt;
         if (cat.position.y <= 0) {
@@ -505,6 +736,27 @@
           cat.userData.velocityY = 0;
           cat.userData.isJumping = false;
         }
+      }
+
+      // Handle pole collision
+      if (isCollidingWithPole) {
+        // Push the cat away from the pole
+        const poleCenterX = billboard.position.x;
+        const poleCenterZ = billboard.position.z;
+        const dx = cat.position.x - poleCenterX;
+        const dz = cat.position.z - poleCenterZ;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < 2.5) { // Minimum distance from pole center
+          const angle = Math.atan2(dz, dx);
+          cat.position.x = poleCenterX + Math.cos(angle) * 2.5;
+          cat.position.z = poleCenterZ + Math.sin(angle) * 2.5;
+        }
+      }
+
+      // Handle walkway movement
+      if (isOnWalkway) {
+          const movement = new THREE.Vector3(0, 0, -8 * dt);
+          cat.position.add(movement);
       }
 
       // --- Camera Rotation ---
@@ -614,6 +866,14 @@
           scoreDiv.textContent = "Score: " + score;
         }
       }
+
+      // Animate walkway segments (replace the existing animation code)
+      beltSegments.forEach(segment => {
+          segment.position.x += 8 * dt; // Move along the walkway's length
+          if (segment.position.x > 30) {
+              segment.position.x = -30; // Reset to start
+          }
+      });
 
       renderer.render(scene, camera);
     }
