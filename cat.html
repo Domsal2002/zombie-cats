@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>3D Cat Collector – Minecraft‑Style Cat with Controls</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 24px;
+      font-family: sans-serif;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">Score: 0</div>
+  <!-- Three.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // === Scene Setup ===
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb); // Sky blue
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // === Lighting ===
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(0, 50, 50);
+    scene.add(directionalLight);
+
+    // === Ground ===
+    const groundGeometry = new THREE.PlaneGeometry(2000, 2000);
+    const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI/2;
+    scene.add(ground);
+
+    // === Sparse Forest with Spherical Canopies ===
+    const numTrees = 30;
+    for (let i = 0; i < numTrees; i++){
+      const tree = new THREE.Group();
+      const trunkGeom = new THREE.CylinderGeometry(0.5, 0.5, 5, 8);
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+      const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+      trunk.position.y = 2.5;
+      tree.add(trunk);
+      const canopyGeom = new THREE.SphereGeometry(3, 16, 16);
+      const canopyMat = new THREE.MeshLambertMaterial({ color: 0x006400 });
+      const canopy = new THREE.Mesh(canopyGeom, canopyMat);
+      canopy.position.y = 5 + 3;
+      tree.add(canopy);
+      tree.position.x = (Math.random()-0.5)*200;
+      tree.position.z = (Math.random()-0.5)*200;
+      scene.add(tree);
+    }
+
+    // === Create Billboard with Controls Instructions ===
+    function createBillboard(text) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 8192; // Much higher resolution
+      canvas.height = 4096;
+      const context = canvas.getContext('2d');
+      
+      // Create a modern billboard background
+      context.fillStyle = '#1a1a1a'; // Dark background
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Add a subtle border
+      context.strokeStyle = '#333333';
+      context.lineWidth = 100;
+      context.strokeRect(50, 50, canvas.width - 100, canvas.height - 100);
+      
+      // Set text properties
+      context.fillStyle = '#FFFFFF';
+      context.font = 'bold 400px Arial'; // Modern font
+      context.textAlign = 'center';
+      
+      // Add a text glow effect
+      context.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      context.shadowBlur = 20;
+      context.shadowOffsetX = 0;
+      context.shadowOffsetY = 0;
+      
+      const lines = text.split('\n');
+      const lineHeight = 500; // Increased line height
+      for (let i = 0; i < lines.length; i++){
+        context.fillText(lines[i], canvas.width/2, 600 + i*lineHeight);
+      }
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      
+      const billboard = new THREE.Group();
+      
+      // Create a solid billboard back
+      const billboardBackGeometry = new THREE.BoxGeometry(80, 40, 1);
+      const billboardBackMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+      const billboardBack = new THREE.Mesh(billboardBackGeometry, billboardBackMaterial);
+      billboardBack.position.y = 60; // Position above pole
+      billboard.add(billboardBack);
+
+      // Create the sign as a regular mesh (front face with text)
+      const signGeometry = new THREE.PlaneGeometry(80, 40);
+      const signMaterial = new THREE.MeshLambertMaterial({ 
+        map: texture,
+        side: THREE.FrontSide
+      });
+      const sign = new THREE.Mesh(signGeometry, signMaterial);
+      sign.position.y = 60;
+      sign.position.z = 0.51; // Slightly in front of the back
+      billboard.add(sign);
+
+      // Add platform (boardwalk) - wider and deeper than before
+      const platformGeometry = new THREE.BoxGeometry(82, 2, 10); // Made thicker
+      const platformMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Wooden color
+      const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+      platform.position.set(0, 40, 0); // Lower platform height
+      billboard.add(platform);
+      
+      // Add single central support pole with solid geometry
+      const poleGeometry = new THREE.CylinderGeometry(2, 2, 40, 16, 1, false); // Set closed cylinder
+      const poleMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 }); // Metal grey
+      const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+      pole.position.set(0, 20, 0); // Adjusted center point
+      billboard.add(pole);
+
+      // Add ladder with adjusted height
+      const ladderGroup = new THREE.Group();
+      
+      // Add solid ladder back for collision
+      const ladderBackGeometry = new THREE.BoxGeometry(0.8, 42, 0.2); // Slightly taller
+      const ladderBackMaterial = new THREE.MeshLambertMaterial({ color: 0x666666, opacity: 0.0, transparent: true });
+      const ladderBack = new THREE.Mesh(ladderBackGeometry, ladderBackMaterial);
+      ladderBack.position.set(0, 21, 2.3); // Adjusted center point
+      ladderGroup.add(ladderBack);
+      
+      // Vertical rails - adjusted height
+      const railGeometry = new THREE.CylinderGeometry(0.05, 0.05, 42, 8); // Slightly taller
+      const railMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+      
+      const leftRail = new THREE.Mesh(railGeometry, railMaterial);
+      leftRail.position.set(-0.3, 21, 2.3);
+      ladderGroup.add(leftRail);
+      
+      const rightRail = new THREE.Mesh(railGeometry, railMaterial);
+      rightRail.position.set(0.3, 21, 2.3);
+      ladderGroup.add(rightRail);
+      
+      // Rungs - adjusted number for new height and rotated correctly
+      const rungGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.6, 8);
+      const rungMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+      
+      for(let i = 0; i < 40; i++) {
+        const rung = new THREE.Mesh(rungGeometry, rungMaterial);
+        // Change rotation to make rungs connect to side rails properly
+        rung.rotation.z = Math.PI/2;
+        rung.position.set(0, i + 1, 2.3); // Adjusted spacing
+        ladderGroup.add(rung);
+      }
+      
+      ladderGroup.position.set(0, 0, 0);
+      billboard.add(ladderGroup);
+
+      // Add collision box for ladder
+      const ladderBox = new THREE.Box3();
+      const ladderBounds = new THREE.Box3().setFromObject(ladderBack);
+      billboard.userData.ladderBox = ladderBox;
+      billboard.userData.updateLadderBox = function() {
+        ladderBox.copy(ladderBounds).applyMatrix4(billboard.matrixWorld);
+      };
+
+      // Add collision box for platform
+      const platformBox = new THREE.Box3();
+      const platformBounds = new THREE.Box3().setFromObject(platform);
+      billboard.userData.platformBox = platformBox;
+      billboard.userData.updatePlatformBox = function() {
+        platformBox.copy(platformBounds).applyMatrix4(billboard.matrixWorld);
+      };
+      
+      return billboard;
+    }
+    
+    const instructions = "CONTROLS:\nW: Move Forward\nS: Move Backward\nA/D: Strafe Left/Right\nArrow/Mouse: Look Around\nSpace: Jump\nW on Ladder: Climb";
+    const billboard = createBillboard(instructions);
+    billboard.position.set(0, 0, -60); // Place at ground level
+    billboard.rotation.y = 0;
+    scene.add(billboard);
+
+    // === Cat (Player) Model – Minecraft‑Style ===
+    // Colors
+    const baseColor = 0xd3d3d3;   // light grey
+    const stripeColor = 0x000000; // black
+
+    // Create the main cat group. Its origin is at ground level.
+    const cat = new THREE.Group();
+    cat.position.y = 0;
+    cat.userData.velocityY = 0;
+    cat.userData.isJumping = false;
+    scene.add(cat);
+
+    // We'll create a sub-group (catBody) to hold the body, head, tail, and legs.
+    // Shift catBody upward by legHeight so that the legs (attached to its bottom)
+    // extend down to y=0.
+    const legHeight = 0.5;
+    const catBody = new THREE.Group();
+    catBody.position.y = legHeight;
+    cat.add(catBody);
+
+    // Body dimensions (blocky, Minecraft‑style):
+    const bodyWidth = 1.2, bodyHeight = 0.7, bodyDepth = 1.5;
+    const bodyGeom = new THREE.BoxGeometry(bodyWidth, bodyHeight, bodyDepth);
+    const bodyMesh = new THREE.Mesh(bodyGeom, new THREE.MeshLambertMaterial({ color: baseColor }));
+    // Position the body so its bottom touches the origin of catBody.
+    bodyMesh.position.y = bodyHeight/2;
+    catBody.add(bodyMesh);
+    // Add two thin black stripes on top of the body.
+    const stripeGeom = new THREE.BoxGeometry(0.1, 0.02, bodyDepth * 0.9);
+    const leftStripe = new THREE.Mesh(stripeGeom, new THREE.MeshLambertMaterial({ color: stripeColor }));
+    leftStripe.position.set(-0.3, bodyHeight*0.8, 0);
+    const rightStripe = new THREE.Mesh(stripeGeom, new THREE.MeshLambertMaterial({ color: stripeColor }));
+    rightStripe.position.set(0.3, bodyHeight*0.8, 0);
+    catBody.add(leftStripe, rightStripe);
+
+    // Legs – attached to the bottom corners of catBody.
+    const legWidth = 0.15, legDepth = 0.15;
+    function createLeg(x, z) {
+      const legGeom = new THREE.BoxGeometry(legWidth, legHeight, legDepth);
+      // Shift geometry so that the top is at y = 0.
+      legGeom.translate(0, -legHeight/2, 0);
+      const legMesh = new THREE.Mesh(legGeom, new THREE.MeshLambertMaterial({ color: baseColor }));
+      legMesh.position.set(x, 0, z);
+      return legMesh;
+    }
+    const marginX = 0.2, marginZ = 0.2;
+    const frontZ = -bodyDepth/2 + marginZ; // front is -Z (cat faces -Z)
+    const backZ  = bodyDepth/2 - marginZ;
+    const leftX  = -bodyWidth/2 + marginX;
+    const rightX = bodyWidth/2 - marginX;
+    const frontLeftLeg  = createLeg(leftX, frontZ);
+    const frontRightLeg = createLeg(rightX, frontZ);
+    const backLeftLeg   = createLeg(leftX, backZ);
+    const backRightLeg  = createLeg(rightX, backZ);
+    catBody.add(frontLeftLeg, frontRightLeg, backLeftLeg, backRightLeg);
+
+    // Head – attached to catBody.
+    const headSize = 0.8;
+    const headGeom = new THREE.BoxGeometry(headSize, headSize, headSize);
+    const headMesh = new THREE.Mesh(headGeom, new THREE.MeshLambertMaterial({ color: baseColor }));
+    // Position the head at the front of the body.
+    headMesh.position.set(0, bodyHeight + headSize/2 - 0.1, -bodyDepth/2 - headSize/2 + 0.1);
+    catBody.add(headMesh);
+    // Add a forehead stripe.
+    const headStripeGeom = new THREE.BoxGeometry(0.2, 0.1, 0.01);
+    const headStripe = new THREE.Mesh(headStripeGeom, new THREE.MeshLambertMaterial({ color: stripeColor }));
+    headStripe.position.set(0, 0, -headSize/2 - 0.01);
+    headMesh.add(headStripe);
+    // Eyes.
+    const eyeGeom = new THREE.SphereGeometry(0.05, 8, 8); // Made eyes slightly smaller
+    const eyeMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
+    const leftEye = new THREE.Mesh(eyeGeom, eyeMat);
+    leftEye.position.set(-0.2, 0.1, -headSize/2 - 0.01); // Adjusted position
+    const rightEye = new THREE.Mesh(eyeGeom, eyeMat);
+    rightEye.position.set(0.2, 0.1, -headSize/2 - 0.01); // Adjusted position
+    headMesh.add(leftEye, rightEye);
+
+    // Add white part of the eyes
+    const eyeWhiteGeom = new THREE.SphereGeometry(0.03, 8, 8);
+    const eyeWhiteMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+    const leftEyeWhite = new THREE.Mesh(eyeWhiteGeom, eyeWhiteMat);
+    leftEyeWhite.position.set(0.02, 0, 0.02);
+    const rightEyeWhite = new THREE.Mesh(eyeWhiteGeom, eyeWhiteMat);
+    rightEyeWhite.position.set(0.02, 0, 0.02);
+    leftEye.add(leftEyeWhite);
+    rightEye.add(rightEyeWhite);
+
+    // Nose
+    const noseGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    const noseMat = new THREE.MeshLambertMaterial({ color: 0xFFA07A });
+    const nose = new THREE.Mesh(noseGeom, noseMat);
+    nose.position.set(0, -0.1, -headSize/2 - 0.05);
+    headMesh.add(nose);
+
+    // New improved smile using multiple segments
+    const mouthGroup = new THREE.Group();
+    const mouthGeom = new THREE.BoxGeometry(0.05, 0.02, 0.01);
+    const mouthMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
+    
+    // Create a gentle curve for the mouth
+    const mouthSegments = 5;
+    for(let i = 0; i < mouthSegments; i++) {
+        const segment = new THREE.Mesh(mouthGeom, mouthMat);
+        const angle = (i - (mouthSegments-1)/2) * 0.2;
+        segment.position.set(angle * 0.8, -Math.abs(angle * 0.3) - 0.2, -headSize/2 - 0.02);
+        mouthGroup.add(segment);
+    }
+    headMesh.add(mouthGroup);
+
+    // Add whiskers
+    const whiskerGeom = new THREE.CylinderGeometry(0.005, 0.005, 0.3, 8);
+    const whiskerMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
+    
+    // Left whiskers
+    for(let i = 0; i < 3; i++) {
+        const whisker = new THREE.Mesh(whiskerGeom, whiskerMat);
+        whisker.rotation.z = Math.PI/2 + (i-1) * 0.2;
+        whisker.position.set(-0.3, -0.15 + i*0.08, -headSize/2 - 0.02);
+        headMesh.add(whisker);
+    }
+    
+    // Right whiskers
+    for(let i = 0; i < 3; i++) {
+        const whisker = new THREE.Mesh(whiskerGeom, whiskerMat);
+        whisker.rotation.z = -Math.PI/2 + (i-1) * 0.2;
+        whisker.position.set(0.3, -0.15 + i*0.08, -headSize/2 - 0.02);
+        headMesh.add(whisker);
+    }
+
+    // Ears – attached to head.
+    function createEar() {
+      // Create a triangle shape for the ear
+      const triangleShape = new THREE.Shape();
+      triangleShape.moveTo(0, 0);
+      triangleShape.lineTo(-0.2, 0.6); // Made ears taller
+      triangleShape.lineTo(0.2, 0.6);  // Made ears wider
+      triangleShape.lineTo(0, 0);
+
+      const extrudeSettings = {
+        depth: 0.2,
+        bevelEnabled: true,
+        bevelThickness: 0.05,
+        bevelSize: 0.05,
+        bevelSegments: 3
+      };
+
+      const earGeom = new THREE.ExtrudeGeometry(triangleShape, extrudeSettings);
+      const earMat = new THREE.MeshLambertMaterial({ color: baseColor });
+      const ear = new THREE.Mesh(earGeom, earMat);
+      
+      // Create black triangle tip
+      const tipShape = new THREE.Shape();
+      tipShape.moveTo(-0.15, 0.35);
+      tipShape.lineTo(0, 0.6);
+      tipShape.lineTo(0.15, 0.35);
+      tipShape.lineTo(-0.15, 0.35);
+
+      const tipGeom = new THREE.ExtrudeGeometry(tipShape, extrudeSettings);
+      const tip = new THREE.Mesh(tipGeom, new THREE.MeshLambertMaterial({ color: stripeColor }));
+      ear.add(tip);
+      
+      return ear;
+    }
+    const leftEar = createEar();
+    leftEar.position.set(-0.25, headSize/2 + 0.2, 0); // Moved up and adjusted position
+    leftEar.rotation.x = Math.PI;
+    leftEar.rotation.z = -0.2; // Slight tilt outward
+    headMesh.add(leftEar);
+    
+    const rightEar = createEar();
+    rightEar.position.set(0.25, headSize/2 + 0.2, 0); // Moved up and adjusted position
+    rightEar.rotation.x = Math.PI;
+    rightEar.rotation.z = 0.2; // Slight tilt outward
+    headMesh.add(rightEar);
+
+    // Tail – attached to catBody so it stays with the body.
+    const tailLength = 1.0;
+    const tailGeom = new THREE.BoxGeometry(0.15, 0.15, tailLength);
+    // Translate so that the base is at (0,0,0) and it extends along +Z.
+    tailGeom.translate(0, 0, tailLength/2);
+    const tailMesh = new THREE.Mesh(tailGeom, new THREE.MeshLambertMaterial({ color: baseColor }));
+    // Attach the tail to the back of the body (for a cat facing -Z, back is +Z)
+    tailMesh.position.set(0, bodyHeight * 0.75, bodyDepth/2 + 0.1);
+    catBody.add(tailMesh);
+
+    // === Animation Variables ===
+    let walkCycle = 0;
+    const legAmplitude = 0.3; // radians
+
+    // === Input Controls for Movement and Camera ===
+    const moveKeys = { forward: false, backward: false, left: false, right: false };
+    const rotateKeys = { left: false, right: false };
+    let mouseX = 0;
+    let mouseY = 0;
+    let camYaw = 0;
+    let camPitch = 0;
+    const mouseSensitivity = 0.002;
+    
+    // Lock pointer for mouse control
+    document.addEventListener('click', function() {
+      document.body.requestPointerLock();
+    });
+
+    // Mouse movement handler
+    document.addEventListener('mousemove', function(e) {
+      if (document.pointerLockElement) {
+        mouseX = e.movementX * mouseSensitivity;
+        mouseY = e.movementY * mouseSensitivity;
+        
+        camYaw -= mouseX;
+        camPitch = Math.max(-Math.PI/3, Math.min(Math.PI/6, camPitch - mouseY));
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      switch(e.code){
+        case "KeyW": moveKeys.forward = true; break;
+        case "KeyS": moveKeys.backward = true; break;
+        case "KeyA": moveKeys.left = true; break;
+        case "KeyD": moveKeys.right = true; break;
+        case "ArrowLeft": rotateKeys.left = true; break;
+        case "ArrowRight": rotateKeys.right = true; break;
+        case "Space":
+          if (!cat.userData.isJumping) {
+            cat.userData.velocityY = 12;
+            cat.userData.isJumping = true;
+          }
+          break;
+      }
+    });
+    
+    document.addEventListener('keyup', function(e) {
+      switch(e.code){
+        case "KeyW": moveKeys.forward = false; break;
+        case "KeyS": moveKeys.backward = false; break;
+        case "KeyA": moveKeys.left = false; break;
+        case "KeyD": moveKeys.right = false; break;
+        case "ArrowLeft": rotateKeys.left = false; break;
+        case "ArrowRight": rotateKeys.right = false; break;
+      }
+    });
+
+    // === Movement Parameters ===
+    const moveSpeed = 10;      // units per second
+    const turnSpeed = Math.PI * 0.5; // radians per second (reduced for smoother camera)
+    const strafeSpeed = 8;     // slightly slower than forward speed
+    let yaw = 0;              // cat's current rotation around Y
+
+    // === Coins ===
+    const coins = [];
+    const coinGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 32);
+    const coinMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+    for (let i = 0; i < 20; i++){
+      const coin = new THREE.Mesh(coinGeometry, coinMaterial);
+      coin.rotation.x = Math.PI/2;
+      coin.position.x = (Math.random()-0.5)*100;
+      coin.position.z = (Math.random()-0.5)*100;
+      coin.position.y = 0.3;
+      scene.add(coin);
+      coins.push(coin);
+    }
+
+    // === Score Tracking ===
+    let score = 0;
+    const scoreDiv = document.getElementById("score");
+
+    // === Animation Loop ===
+    let lastTime = 0;
+    let isOnLadder = false;
+
+    function animate(time) {
+      requestAnimationFrame(animate);
+      const dt = (time - lastTime) / 1000;
+      lastTime = time;
+
+      // Update collision boxes
+      billboard.userData.updateLadderBox();
+      billboard.userData.updatePlatformBox();
+
+      // Check if cat is near the ladder
+      const catBox = new THREE.Box3().setFromObject(cat);
+      isOnLadder = catBox.intersectsBox(billboard.userData.ladderBox);
+
+      // Check if cat is on platform
+      const isOnPlatform = catBox.intersectsBox(billboard.userData.platformBox);
+
+      // Handle ladder climbing and platform collision
+      if (isOnLadder && moveKeys.forward) {
+        // Move up along ladder
+        const oldY = cat.position.y;
+        cat.position.y += 5 * dt; // Climb speed
+        
+        // Keep cat against ladder
+        cat.position.z = billboard.position.z + 2.3;
+        
+        cat.userData.velocityY = 0;
+        cat.userData.isJumping = false;
+      } else if (isOnPlatform) {
+        // Allow walking on platform
+        cat.userData.velocityY = 0;
+        cat.userData.isJumping = false;
+        cat.position.y = 41; // Adjusted to match new platform thickness
+      } else if (!isOnLadder && !isOnPlatform) {
+        // Normal gravity physics
+        cat.position.y += cat.userData.velocityY * dt;
+        cat.userData.velocityY += -30 * dt;
+        if (cat.position.y <= 0) {
+          cat.position.y = 0;
+          cat.userData.velocityY = 0;
+          cat.userData.isJumping = false;
+        }
+      }
+
+      // --- Camera Rotation ---
+      // Arrow keys add to mouse-controlled rotation
+      if (rotateKeys.left) {
+        camYaw += turnSpeed * dt;
+      }
+      if (rotateKeys.right) {
+        camYaw -= turnSpeed * dt;
+      }
+
+      // Make cat face the same direction as the camera
+      yaw = camYaw;
+      cat.rotation.y = yaw;
+
+      // --- Compute Movement Vectors based on Camera Direction ---
+      const cameraDirection = new THREE.Vector3(0, 0, -1);
+      cameraDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), camYaw);
+      const rightVector = new THREE.Vector3(1, 0, 0);
+      rightVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), camYaw);
+
+      // --- Cat Movement (relative to camera direction) ---
+      const movement = new THREE.Vector3(0, 0, 0);
+      
+      // Forward/Backward (using camera direction)
+      if (moveKeys.forward) {
+        movement.add(cameraDirection.clone().multiplyScalar(moveSpeed * dt));
+      }
+      if (moveKeys.backward) {
+        movement.add(cameraDirection.clone().multiplyScalar(-moveSpeed * dt));
+      }
+      
+      // Strafe Left/Right (using camera right vector)
+      if (moveKeys.left) {
+        movement.add(rightVector.clone().multiplyScalar(-strafeSpeed * dt));
+      }
+      if (moveKeys.right) {
+        movement.add(rightVector.clone().multiplyScalar(strafeSpeed * dt));
+      }
+
+      // Apply movement
+      if (movement.length() > 0) {
+        cat.position.add(movement);
+        walkCycle += movement.length();
+      }
+
+      // --- Leg Animation (only when moving and not jumping) ---
+      const isMoving = movement.length() > 0;
+      if (isMoving && !cat.userData.isJumping) {
+        frontLeftLeg.rotation.x = Math.sin(walkCycle * 2) * legAmplitude;
+        backRightLeg.rotation.x = Math.sin(walkCycle * 2) * legAmplitude;
+        frontRightLeg.rotation.x = -Math.sin(walkCycle * 2) * legAmplitude;
+        backLeftLeg.rotation.x = -Math.sin(walkCycle * 2) * legAmplitude;
+      } else {
+        frontLeftLeg.rotation.x = 0;
+        frontRightLeg.rotation.x = 0;
+        backLeftLeg.rotation.x = 0;
+        backRightLeg.rotation.x = 0;
+      }
+
+      // --- Tail Animation ---
+      if (cat.userData.isJumping) {
+        tailMesh.rotation.x = -Math.PI/2;
+      } else if (isMoving) {
+        tailMesh.rotation.x = Math.sin(walkCycle * 2) * 0.3;
+      } else {
+        tailMesh.rotation.x = 0;
+      }
+
+      // --- Camera Follow with New Control Scheme ---
+      const cameraHeight = 4;
+      const cameraDistance = 8;
+      const lookAtHeight = 2;
+      
+      // Calculate camera position based on rotation
+      const cameraOffset = new THREE.Vector3(0, 0, cameraDistance);
+      cameraOffset.applyAxisAngle(new THREE.Vector3(1, 0, 0), camPitch);
+      cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), camYaw);
+      
+      const targetCameraPos = new THREE.Vector3(
+        cat.position.x + cameraOffset.x,
+        cat.position.y + cameraHeight + cameraOffset.y,
+        cat.position.z + cameraOffset.z
+      );
+      
+      // Smoothly move camera
+      camera.position.lerp(targetCameraPos, 0.1);
+      
+      // Look at point slightly above cat
+      const lookAtPoint = new THREE.Vector3(
+        cat.position.x,
+        cat.position.y + lookAtHeight,
+        cat.position.z
+      );
+      camera.lookAt(lookAtPoint);
+
+      // --- Coin Collection ---
+      for (let i = coins.length - 1; i >= 0; i--){
+        const coin = coins[i];
+        const dx = coin.position.x - cat.position.x;
+        const dz = coin.position.z - cat.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < 2) {
+          scene.remove(coin);
+          coins.splice(i, 1);
+          score++;
+          scoreDiv.textContent = "Score: " + score;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(animate);
+
+    // === Handle Window Resize ===
+    window.addEventListener('resize', function(){
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
