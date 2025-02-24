@@ -633,6 +633,85 @@ class Game {
 
         return movement;
     }
+
+    updatePlayerCount(count) {
+        const playersDiv = document.getElementById('players');
+        if (playersDiv) {
+            playersDiv.textContent = `Players Online: ${count}/5`;
+        }
+    }
+
+    createGameObjects() {
+        // Create cat (player)
+        this.cat = new Cat(this.playerName);
+        this.cat.activePowerups = []; // Initialize powerups array
+        this.sceneSetup.add(this.cat.group);
+
+        // Create mirror
+        this.createMirror();
+
+        // Create billboard with instructions
+        this.billboard = new Billboard();
+        this.billboard.group.position.set(0, 0, -60);
+        this.sceneSetup.add(this.billboard.group);
+
+        // Create moving walkway
+        this.walkway = new Walkway();
+        this.walkway.group.position.set(0, 0, -30);
+        this.walkway.group.rotation.y = Math.PI/2;
+        this.sceneSetup.add(this.walkway.group);
+
+        // Create color selector
+        this.colorSelector = new ColorSelector();
+        this.colorSelector.group.position.set(8, 0, -30);
+        this.colorSelector.group.rotation.y = Math.PI/2;
+        this.sceneSetup.add(this.colorSelector.group);
+    }
+
+    createMirror() {
+        // Create mirror frame
+        const frameGeometry = new THREE.BoxGeometry(20, 12, 0.3);
+        const frameMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x8B4513,
+            metalness: 0.5,
+            roughness: 0.2
+        });
+        this.mirrorFrame = new THREE.Mesh(frameGeometry, frameMaterial);
+        this.mirrorFrame.position.set(25, 3, -40);
+        this.mirrorFrame.rotation.y = Math.PI/2;
+        this.sceneSetup.add(this.mirrorFrame);
+
+        // Create mirror surface
+        const geometry = new THREE.PlaneGeometry(19, 11);
+        const mirrorMaterial = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            metalness: 1.0,
+            roughness: 0.0,
+            reflectivity: 1.0,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.0,
+            side: THREE.DoubleSide
+        });
+
+        this.mirror = new THREE.Mesh(geometry, mirrorMaterial);
+        this.mirror.position.copy(this.mirrorFrame.position);
+        this.mirror.position.x -= 0.2;
+        this.mirror.rotation.y = Math.PI/2;
+        this.sceneSetup.add(this.mirror);
+
+        // Add environment map to enhance reflection
+        const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512);
+        const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
+        this.mirror.material.envMap = cubeRenderTarget.texture;
+        
+        // Update environment map in animation loop
+        this.updateMirror = () => {
+            this.mirror.visible = false;
+            cubeCamera.position.copy(this.mirror.position);
+            cubeCamera.update(this.sceneSetup.renderer, this.sceneSetup.scene);
+            this.mirror.visible = true;
+        };
+    }
 }
 
 // Initialize menu system
