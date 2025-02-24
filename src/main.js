@@ -132,61 +132,90 @@ class Game {
 
         // Store other players
         this.otherPlayers = new Map();
+        this.zombieMap = new Map();
 
         // Update connection status immediately
         const connectionStatus = document.getElementById('connection-status');
         connectionStatus.textContent = 'Connected';
         connectionStatus.style.color = '#4CAF50';
 
-        // Handle existing players
-        this.socket.on('existing_players', (players) => {
-            players.forEach(player => {
+        // Handle initial game state
+        this.socket.on('game_state', (state) => {
+            // Handle existing players
+            state.players.forEach(player => {
                 if (player.id !== this.socket.id) {
-                    const otherCat = new Cat(player.name);
-                    otherCat.group.position.set(player.position.x, player.position.y, player.position.z);
-                    otherCat.group.rotation.y = player.rotation.y;
-                    otherCat.setColor(parseInt(player.color.replace('#', '0x')));
-                    this.otherPlayers.set(player.id, otherCat);
-                    this.sceneSetup.add(otherCat.group);
+                    this.addOtherPlayer(player);
                 }
             });
-            // Update player count
-            this.updatePlayerCount(players.length);
+
+            // Handle existing zombies
+            state.zombies.forEach(zombie => {
+                this.addZombie(zombie);
+            });
         });
         
         // Handle new player joining
         this.socket.on('player_joined', (player) => {
             if (player.id !== this.socket.id) {
-                const otherCat = new Cat(player.name);
-                otherCat.group.position.set(player.position.x, player.position.y, player.position.z);
-                otherCat.group.rotation.y = player.rotation.y;
-                otherCat.setColor(parseInt(player.color.replace('#', '0x')));
-                this.otherPlayers.set(player.id, otherCat);
-                this.sceneSetup.add(otherCat.group);
-                // Update player count
-                this.updatePlayerCount(this.otherPlayers.size + 1);
+                this.addOtherPlayer(player);
             }
         });
 
-        // Handle player count updates
-        this.socket.on('player_count', (data) => {
-            this.updatePlayerCount(data.current);
-        });
-        
         // Handle player movement
         this.socket.on('player_moved', (data) => {
             const otherCat = this.otherPlayers.get(data.id);
             if (otherCat) {
-                otherCat.group.position.set(data.position.x, data.position.y, data.position.z);
+                otherCat.group.position.lerp(new THREE.Vector3(
+                    data.position.x,
+                    data.position.y,
+                    data.position.z
+                ), 0.3);
                 otherCat.group.rotation.y = data.rotation.y;
             }
         });
 
         // Handle player color change
         this.socket.on('player_color_changed', (data) => {
+            if (data.id === this.socket.id) {
+                this.cat.setColor(parseInt(data.color.replace('#', '0x')));
+            } else {
+                const otherCat = this.otherPlayers.get(data.id);
+                if (otherCat) {
+                    otherCat.setColor(parseInt(data.color.replace('#', '0x')));
+                }
+            }
+        });
+
+        // Handle player shots
+        this.socket.on('player_shot', (data) => {
             const otherCat = this.otherPlayers.get(data.id);
             if (otherCat) {
-                otherCat.setColor(parseInt(data.color.replace('#', '0x')));
+                otherCat.shootLaser();
+            }
+        });
+        
+        // Handle zombie spawning
+        this.socket.on('zombie_spawned', (zombie) => {
+            this.addZombie(zombie);
+        });
+
+        // Handle zombie health updates
+        this.socket.on('zombie_health_update', (data) => {
+            const zombie = this.zombieMap.get(data.id);
+            if (zombie) {
+                zombie.health = data.health;
+            }
+        });
+
+        // Handle zombie death
+        this.socket.on('zombie_died', (zombieId) => {
+            const zombie = this.zombieMap.get(zombieId);
+            if (zombie) {
+                this.sceneSetup.scene.remove(zombie.group);
+                this.zombieMap.delete(zombieId);
+                this.zombies = this.zombies.filter(z => z !== zombie);
+                this.zombiesKilled++;
+                this.scoreDiv.textContent = "Zombies Killed: " + this.zombiesKilled;
             }
         });
         
@@ -209,103 +238,46 @@ class Game {
 
         // Setup periodic position updates
         setInterval(() => {
-            if (this.socket) {
+            if (this.socket && this.socket.connected) {
                 this.socket.emit('player_move', {
                     position: this.cat.group.position,
                     rotation: { y: this.cat.group.rotation.y }
                 });
             }
-        }, 50); // Send updates 20 times per second
+        }, 50);
     }
 
-    updatePlayerCount(count) {
-        const playersDiv = document.getElementById('players');
-        if (playersDiv) {
-            playersDiv.textContent = `Players Online: ${count}/5`;
-        }
+    addOtherPlayer(player) {
+        const otherCat = new Cat(player.name);
+        otherCat.group.position.set(player.position.x, player.position.y, player.position.z);
+        otherCat.group.rotation.y = player.rotation.y;
+        otherCat.setColor(parseInt(player.color.replace('#', '0x')));
+        this.otherPlayers.set(player.id, otherCat);
+        this.sceneSetup.add(otherCat.group);
+        this.updatePlayerCount(this.otherPlayers.size + 1);
     }
 
-    createGameObjects() {
-        // Create cat (player)
-        this.cat = new Cat(this.playerName);
-        this.cat.activePowerups = []; // Initialize powerups array
-        this.sceneSetup.add(this.cat.group);
-
-        // Create mirror
-        this.createMirror();
-
-        // Create billboard with instructions
-        this.billboard = new Billboard();
-        this.billboard.group.position.set(0, 0, -60);
-        this.sceneSetup.add(this.billboard.group);
-
-        // Create moving walkway
-        this.walkway = new Walkway();
-        this.walkway.group.position.set(0, 0, -30);
-        this.walkway.group.rotation.y = Math.PI/2;
-        this.sceneSetup.add(this.walkway.group);
-
-        // Create color selector
-        this.colorSelector = new ColorSelector();
-        this.colorSelector.group.position.set(8, 0, -30);
-        this.colorSelector.group.rotation.y = Math.PI/2;
-        this.sceneSetup.add(this.colorSelector.group);
-    }
-
-    createMirror() {
-        // Create mirror frame
-        const frameGeometry = new THREE.BoxGeometry(20, 12, 0.3);
-        const frameMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x8B4513,
-            metalness: 0.5,
-            roughness: 0.2
-        });
-        this.mirrorFrame = new THREE.Mesh(frameGeometry, frameMaterial);
-        this.mirrorFrame.position.set(25, 3, -40);
-        this.mirrorFrame.rotation.y = Math.PI/2;
-        this.sceneSetup.add(this.mirrorFrame);
-
-        // Create mirror surface
-        const geometry = new THREE.PlaneGeometry(19, 11);
-        const mirrorMaterial = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff,
-            metalness: 1.0,
-            roughness: 0.0,
-            reflectivity: 1.0,
-            clearcoat: 1.0,
-            clearcoatRoughness: 0.0,
-            side: THREE.DoubleSide
-        });
-
-        this.mirror = new THREE.Mesh(geometry, mirrorMaterial);
-        this.mirror.position.copy(this.mirrorFrame.position);
-        this.mirror.position.x -= 0.2;
-        this.mirror.rotation.y = Math.PI/2;
-        this.sceneSetup.add(this.mirror);
-
-        // Add environment map to enhance reflection
-        const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512);
-        const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
-        this.mirror.material.envMap = cubeRenderTarget.texture;
-        
-        // Update environment map in animation loop
-        this.updateMirror = () => {
-            this.mirror.visible = false;
-            cubeCamera.position.copy(this.mirror.position);
-            cubeCamera.update(this.sceneSetup.renderer, this.sceneSetup.scene);
-            this.mirror.visible = true;
-        };
-    }
-
-    shootLaser() {
-        // Create and add laser
-        this.cat.shootLaser();
-        this.cat.lasers.forEach(laser => this.sceneSetup.add(laser));
+    addZombie(zombieData) {
+        const zombie = new Zombie(
+            new THREE.Vector3(zombieData.position.x, zombieData.position.y, zombieData.position.z),
+            zombieData.level,
+            zombieData.isBoss
+        );
+        zombie.health = zombieData.health;
+        this.zombieMap.set(zombieData.id, zombie);
+        this.zombies.push(zombie);
+        this.sceneSetup.add(zombie.group);
     }
 
     spawnZombie(isBoss = false) {
+        if (!this.isSoloMode) {
+            // In multiplayer, only spawn if we're the first player
+            if (this.socket.id !== Array.from(this.otherPlayers.keys())[0]) {
+                return;
+            }
+        }
+
         if (this.zombies.length < this.maxZombies || isBoss) {
-            // Random position around the player
             const angle = Math.random() * Math.PI * 2;
             const position = new THREE.Vector3(
                 Math.cos(angle) * this.spawnRadius,
@@ -314,9 +286,32 @@ class Game {
             );
             position.add(this.cat.group.position);
 
-            const zombie = new Zombie(position, this.zombieLevel, isBoss);
-            this.zombies.push(zombie);
-            this.sceneSetup.add(zombie.group);
+            if (this.isSoloMode) {
+                const zombie = new Zombie(position, this.zombieLevel, isBoss);
+                this.zombies.push(zombie);
+                this.sceneSetup.add(zombie.group);
+            } else {
+                // In multiplayer, emit spawn event
+                this.socket.emit('spawn_zombie', {
+                    position: position,
+                    level: this.zombieLevel,
+                    isBoss: isBoss,
+                    health: isBoss ? 500 + this.zombieLevel * 100 : 100 + this.zombieLevel * 20
+                });
+            }
+        }
+    }
+
+    shootLaser() {
+        this.cat.shootLaser();
+        this.cat.lasers.forEach(laser => this.sceneSetup.add(laser));
+
+        // Emit shoot event in multiplayer
+        if (!this.isSoloMode && this.socket) {
+            this.socket.emit('player_shoot', {
+                position: this.cat.group.position,
+                direction: this.cat.group.rotation
+            });
         }
     }
 
@@ -365,13 +360,12 @@ class Game {
         
         if (difficultyLevel > this.zombieLevel - 1) {
             this.zombieLevel = difficultyLevel + 1;
-            this.maxZombies = 15 + Math.floor(difficultyLevel * 3); // More zombies as time goes on
-            this.zombieSpawnInterval = Math.max(1000, 2000 - difficultyLevel * 100); // Spawn faster over time
+            this.maxZombies = 15 + Math.floor(difficultyLevel * 3);
+            this.zombieSpawnInterval = Math.max(1000, 2000 - difficultyLevel * 100);
         }
 
         // Spawn new zombies if needed
         if (now - this.lastZombieSpawn > this.zombieSpawnInterval) {
-            // Try to spawn multiple zombies at once
             const spawnCount = Math.min(3, this.maxZombies - this.zombies.length);
             for (let i = 0; i < spawnCount; i++) {
                 this.spawnZombie();
@@ -405,15 +399,30 @@ class Game {
                     zombie.takeDamage(laser.userData.damage);
                     this.sceneSetup.scene.remove(laser);
                     this.cat.lasers.splice(j, 1);
+
+                    // In multiplayer, emit zombie damage
+                    if (!this.isSoloMode) {
+                        const zombieId = Array.from(this.zombieMap.entries())
+                            .find(([_, z]) => z === zombie)?.[0];
+                        if (zombieId) {
+                            this.socket.emit('zombie_damaged', {
+                                zombieId: zombieId,
+                                health: zombie.health
+                            });
+                        }
+                    }
                 }
             }
 
             // Remove dead zombies
             if (zombie.health <= 0) {
-                this.sceneSetup.scene.remove(zombie.group);
-                this.zombies.splice(i, 1);
-                this.zombiesKilled++;
-                this.scoreDiv.textContent = "Zombies Killed: " + this.zombiesKilled;
+                if (this.isSoloMode) {
+                    this.sceneSetup.scene.remove(zombie.group);
+                    this.zombies.splice(i, 1);
+                    this.zombiesKilled++;
+                    this.scoreDiv.textContent = "Zombies Killed: " + this.zombiesKilled;
+                }
+                // In multiplayer, zombie removal is handled by the 'zombie_died' event
             }
         }
     }
