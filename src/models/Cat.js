@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { HealthBar } from './HealthBar.js';
 
 export class Cat {
-    constructor(playerName = '') {
+    constructor(playerName = '', isSoloMode = true, socket = null) {
         this.group = new THREE.Group();
         this.group.position.y = 0;
         this.group.userData.velocityY = 0;
@@ -36,6 +36,9 @@ export class Cat {
         this.healthBar = new HealthBar(this.maxHealth, playerName);
         this.healthBar.group.position.y = 3;
         this.group.add(this.healthBar.group);
+
+        this.isSoloMode = isSoloMode;
+        this.socket = socket;
 
         this.createCatModel();
     }
@@ -224,10 +227,12 @@ export class Cat {
         // Create laser beams from both eyes
         const laserGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1, 8);
         laserGeometry.rotateX(Math.PI / 2);
-        const laserMaterial = new THREE.MeshBasicMaterial({ 
+        const laserMaterial = new THREE.MeshStandardMaterial({ 
             color: 0xff0000,
             emissive: 0xff0000,
-            emissiveIntensity: 2
+            emissiveIntensity: 2,
+            metalness: 1.0,
+            roughness: 0.0
         });
 
         this.eyePositions.forEach(eyePos => {
@@ -250,6 +255,14 @@ export class Cat {
             laser.userData.damage = this.laserDamage;
             this.lasers.push(laser);
         });
+
+        // Emit shoot event in multiplayer
+        if (!this.isSoloMode && this.socket) {
+            this.socket.emit('player_shoot', {
+                position: this.group.position,
+                direction: this.group.rotation
+            });
+        }
     }
 
     updateLasers(dt, scene) {
@@ -328,5 +341,10 @@ export class Cat {
         this.backRightLeg.material.color.setHex(color);
         this.headMesh.material.color.setHex(color);
         this.tailMesh.material.color.setHex(color);
+
+        // Emit color change in multiplayer
+        if (!this.isSoloMode && this.socket) {
+            this.socket.emit('player_color_change', '#' + color.toString(16).padStart(6, '0'));
+        }
     }
 } 

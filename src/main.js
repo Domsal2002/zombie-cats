@@ -19,6 +19,7 @@ class Game {
         this.isSoloMode = isSoloMode;
         this.playerName = playerName;
         this.socket = socket;
+        this.isFirstPlayer = false; // Track if this client is the first player
         
         // Setup scene
         this.sceneSetup = new SceneSetup();
@@ -141,6 +142,9 @@ class Game {
 
         // Handle initial game state
         this.socket.on('game_state', (state) => {
+            // Set first player status
+            this.isFirstPlayer = state.firstPlayerId === this.socket.id;
+            
             // Handle existing players
             state.players.forEach(player => {
                 if (player.id !== this.socket.id) {
@@ -228,6 +232,11 @@ class Game {
             }
         });
 
+        // Handle new first player assignment
+        this.socket.on('new_first_player', (newFirstPlayerId) => {
+            this.isFirstPlayer = newFirstPlayerId === this.socket.id;
+        });
+
         // Send initial player data
         this.socket.emit('join', {
             name: this.playerName,
@@ -248,7 +257,7 @@ class Game {
     }
 
     addOtherPlayer(player) {
-        const otherCat = new Cat(player.name);
+        const otherCat = new Cat(player.name, this.isSoloMode, this.socket);
         otherCat.group.position.set(player.position.x, player.position.y, player.position.z);
         otherCat.group.rotation.y = player.rotation.y;
         otherCat.setColor(parseInt(player.color.replace('#', '0x')));
@@ -272,7 +281,7 @@ class Game {
     spawnZombie(isBoss = false) {
         if (!this.isSoloMode) {
             // In multiplayer, only spawn if we're the first player
-            if (this.socket.id !== Array.from(this.otherPlayers.keys())[0]) {
+            if (!this.isFirstPlayer) {
                 return;
             }
         }
@@ -643,7 +652,7 @@ class Game {
 
     createGameObjects() {
         // Create cat (player)
-        this.cat = new Cat(this.playerName);
+        this.cat = new Cat(this.playerName, this.isSoloMode, this.socket);
         this.cat.activePowerups = []; // Initialize powerups array
         this.sceneSetup.add(this.cat.group);
 

@@ -26,6 +26,7 @@ const players = new Map();
 const zombies = new Map();
 const MAX_PLAYERS = 5;
 let lastZombieId = 0;
+let firstPlayerId = null; // Track the first player
 
 // Broadcast player count to all clients
 function broadcastPlayerCount() {
@@ -40,6 +41,12 @@ function broadcastPlayerCount() {
 // Generate unique zombie ID
 function generateZombieId() {
     return `zombie_${++lastZombieId}`;
+}
+
+// Get first connected player's ID
+function getFirstPlayerId() {
+    if (players.size === 0) return null;
+    return Array.from(players.keys())[0];
 }
 
 io.on('connection', (socket) => {
@@ -77,10 +84,16 @@ io.on('connection', (socket) => {
             lastUpdate: Date.now()
         });
 
+        // Update first player tracking
+        if (!firstPlayerId) {
+            firstPlayerId = socket.id;
+        }
+
         // Send existing game state to new player
         socket.emit('game_state', {
             players: Array.from(players.values()),
-            zombies: Array.from(zombies.values())
+            zombies: Array.from(zombies.values()),
+            firstPlayerId: firstPlayerId // Send first player ID
         });
         
         // Broadcast new player to others
@@ -90,18 +103,21 @@ io.on('connection', (socket) => {
 
     // Handle zombie spawn request
     socket.on('spawn_zombie', (zombieData) => {
-        const zombieId = generateZombieId();
-        const zombie = {
-            id: zombieId,
-            position: zombieData.position,
-            level: zombieData.level,
-            isBoss: zombieData.isBoss,
-            health: zombieData.health,
-            spawnTime: Date.now()
-        };
-        
-        zombies.set(zombieId, zombie);
-        io.emit('zombie_spawned', zombie);
+        // Only allow first player to spawn zombies
+        if (socket.id === firstPlayerId) {
+            const zombieId = generateZombieId();
+            const zombie = {
+                id: zombieId,
+                position: zombieData.position,
+                level: zombieData.level,
+                isBoss: zombieData.isBoss,
+                health: zombieData.health,
+                spawnTime: Date.now()
+            };
+            
+            zombies.set(zombieId, zombie);
+            io.emit('zombie_spawned', zombie);
+        }
     });
 
     // Handle zombie damage
@@ -160,6 +176,16 @@ io.on('connection', (socket) => {
     // Handle disconnection
     socket.on('disconnect', () => {
         console.log('Player disconnected:', socket.id);
+        
+        // If first player disconnects, assign new first player
+        if (socket.id === firstPlayerId) {
+            firstPlayerId = getFirstPlayerId();
+            // Notify all clients about new first player
+            if (firstPlayerId) {
+                io.emit('new_first_player', firstPlayerId);
+            }
+        }
+        
         players.delete(socket.id);
         io.emit('player_left', socket.id);
         broadcastPlayerCount();

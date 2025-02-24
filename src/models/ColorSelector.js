@@ -85,7 +85,8 @@ export class ColorSelector {
             if (child.userData.isColorSection) {
                 const sectionBox = new THREE.Box3().setFromObject(child);
                 if (catBox.intersectsBox(sectionBox)) {
-                    cat.setColor(child.userData.color);
+                    const colorHex = child.userData.color;
+                    cat.setColor(colorHex);
                 }
             }
         });
