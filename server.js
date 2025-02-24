@@ -1,7 +1,11 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, {
+    pingInterval: 2000,  // Send ping every 2 seconds
+    pingTimeout: 5000,   // Consider connection lost after 5 seconds of no response
+    transports: ['websocket'], // Force WebSocket transport
+});
 const path = require('path');
 
 // Serve static files from the dist directory
@@ -11,16 +15,16 @@ app.use(express.static('dist'));
 const players = new Map();
 const MAX_PLAYERS = 5;
 
+// Broadcast player count to all clients
+function broadcastPlayerCount() {
+    io.emit('player_count', {
+        current: players.size,
+        max: MAX_PLAYERS
+    });
+}
+
 io.on('connection', (socket) => {
     console.log('A user connected');
-
-    // Send current player count to all clients
-    const updatePlayerCount = () => {
-        io.emit('player_count', {
-            current: players.size,
-            max: MAX_PLAYERS
-        });
-    };
 
     // Check server capacity before joining
     socket.on('check_capacity', () => {
@@ -43,7 +47,8 @@ io.on('connection', (socket) => {
             position: playerData.position,
             rotation: playerData.rotation,
             color: playerData.color,
-            name: playerData.name
+            name: playerData.name,
+            lastUpdate: Date.now()
         });
 
         // Send existing players to new player
@@ -52,21 +57,29 @@ io.on('connection', (socket) => {
         // Broadcast new player to others
         socket.broadcast.emit('player_joined', players.get(socket.id));
 
-        // Update player count for all clients
-        updatePlayerCount();
+        // Broadcast updated player count
+        broadcastPlayerCount();
     });
 
-    // Handle player movement
+    // Handle player movement with rate limiting
+    let lastMovementUpdate = 0;
+    const MOVEMENT_THROTTLE = 50; // Minimum time between updates in ms
+
     socket.on('player_move', (data) => {
-        const player = players.get(socket.id);
-        if (player) {
-            player.position = data.position;
-            player.rotation = data.rotation;
-            socket.broadcast.emit('player_moved', {
-                id: socket.id,
-                position: data.position,
-                rotation: data.rotation
-            });
+        const now = Date.now();
+        if (now - lastMovementUpdate >= MOVEMENT_THROTTLE) {
+            const player = players.get(socket.id);
+            if (player) {
+                player.position = data.position;
+                player.rotation = data.rotation;
+                player.lastUpdate = now;
+                socket.broadcast.emit('player_moved', {
+                    id: socket.id,
+                    position: data.position,
+                    rotation: data.rotation
+                });
+                lastMovementUpdate = now;
+            }
         }
     });
 
@@ -87,9 +100,21 @@ io.on('connection', (socket) => {
         console.log('User disconnected');
         players.delete(socket.id);
         io.emit('player_left', socket.id);
-        updatePlayerCount();
+        broadcastPlayerCount();
     });
 });
+
+// Clean up stale connections every 30 seconds
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, player] of players.entries()) {
+        if (now - player.lastUpdate > 10000) { // Remove if no update for 10 seconds
+            players.delete(id);
+            io.emit('player_left', id);
+            broadcastPlayerCount();
+        }
+    }
+}, 30000);
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {

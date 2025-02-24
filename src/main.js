@@ -27,6 +27,9 @@ class Game {
         this.inputController = new InputController();
         this.cameraController = new CameraController(this.sceneSetup.camera);
         
+        // Create damage overlay
+        this.createDamageOverlay();
+        
         // Create game objects
         this.createGameObjects();
         
@@ -78,6 +81,29 @@ class Game {
         this.animate(0);
     }
 
+    createDamageOverlay() {
+        // Create damage overlay
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(255, 0, 0, 0.0)';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.transition = 'background-color 0.1s ease-out';
+        overlay.style.zIndex = '1000';
+        document.body.appendChild(overlay);
+        this.damageOverlay = overlay;
+    }
+
+    showDamageEffect() {
+        this.damageOverlay.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+        setTimeout(() => {
+            this.damageOverlay.style.backgroundColor = 'rgba(255, 0, 0, 0.0)';
+        }, 100);
+    }
+
     setupPowerupDisplay() {
         this.powerupDiv = document.createElement("div");
         this.powerupDiv.style.position = "fixed";
@@ -107,6 +133,11 @@ class Game {
         // Store other players
         this.otherPlayers = new Map();
 
+        // Update connection status immediately
+        const connectionStatus = document.getElementById('connection-status');
+        connectionStatus.textContent = 'Connected';
+        connectionStatus.style.color = '#4CAF50';
+
         // Handle existing players
         this.socket.on('existing_players', (players) => {
             players.forEach(player => {
@@ -119,6 +150,8 @@ class Game {
                     this.sceneSetup.add(otherCat.group);
                 }
             });
+            // Update player count
+            this.updatePlayerCount(players.length);
         });
         
         // Handle new player joining
@@ -130,7 +163,14 @@ class Game {
                 otherCat.setColor(parseInt(player.color.replace('#', '0x')));
                 this.otherPlayers.set(player.id, otherCat);
                 this.sceneSetup.add(otherCat.group);
+                // Update player count
+                this.updatePlayerCount(this.otherPlayers.size + 1);
             }
+        });
+
+        // Handle player count updates
+        this.socket.on('player_count', (data) => {
+            this.updatePlayerCount(data.current);
         });
         
         // Handle player movement
@@ -176,6 +216,13 @@ class Game {
                 });
             }
         }, 50); // Send updates 20 times per second
+    }
+
+    updatePlayerCount(count) {
+        const playersDiv = document.getElementById('players');
+        if (playersDiv) {
+            playersDiv.textContent = `Players Online: ${count}/5`;
+        }
     }
 
     createGameObjects() {
@@ -347,6 +394,7 @@ class Game {
             if (zombie.collisionBox.intersectsBox(new THREE.Box3().setFromObject(this.cat.group))) {
                 if (zombie.canAttack()) {
                     this.cat.takeDamage(zombie.damage);
+                    this.showDamageEffect();
                 }
             }
 
