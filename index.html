@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Cat Zombies</title>
+    <link rel="stylesheet" href="/src/styles/main.css">
+</head>
+<body>
+    <div id="main-menu" class="menu active">
+        <div class="menu-content">
+            <h1>Cat Zombies</h1>
+            <button id="join-multiplayer">Join Multiplayer</button>
+            <button id="play-solo">Play Solo</button>
+            <div id="server-status">Players Online: 0/5</div>
+        </div>
+    </div>
+
+    <div id="player-name-modal" class="modal">
+        <div class="modal-content">
+            <h2>Enter Your Name</h2>
+            <input type="text" id="player-name" maxlength="20" placeholder="Your Name">
+            <p id="server-full-message" style="display: none; color: red;">Server is full! Try again later or play solo.</p>
+            <button id="join-game-btn">Join Game</button>
+            <button id="back-to-menu-btn">Back to Menu</button>
+        </div>
+    </div>
+
+    <div id="game-ui" style="display: none;">
+        <div id="fps">FPS: 0</div>
+        <div id="score">Score: 0</div>
+        <div id="players">Players Online: 0/5</div>
+        <div id="controls">
+            WASD - Move<br>
+            <span class="arrow">↑↓←→</span> / Mouse - Camera<br>
+            Space - Jump<br>
+            Left Click - Shoot Laser<br>
+            <br>
+            <strong>Multiplayer Status:</strong><br>
+            <span id="connection-status">Connecting...</span>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html> 

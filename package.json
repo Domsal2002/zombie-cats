@@ -1,0 +1,21 @@
+{
+  "name": "nonsenseland",
+  "version": "1.0.0",
+  "description": "A 3D cat collector game",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.7.2",
+    "three": "^0.128.0"
+  },
+  "devDependencies": {
+    "vite": "^4.5.9"
+  }
+}
